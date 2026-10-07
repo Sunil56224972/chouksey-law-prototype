@@ -4,6 +4,7 @@
 "use strict";
 
 const SYSTEM_PROMPT = require("./_knowledge.js");
+const fallback = require("./_fallback.js");
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
@@ -28,6 +29,26 @@ function sendJson(res, status, payload) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(payload));
+}
+
+// Answer from the built-in college facts (api/_fallback.js), streamed in small pieces
+// like a model reply, so visitors get a real answer instead of an error.
+async function sendFallback(res, messages) {
+  let text;
+  try { text = fallback.answer(messages); } catch (e) {
+    console.error("fallback failed", e);
+    text = "Sorry, I couldn't work that out. The admission cell can help on [97524 10899](tel:+919752410899) or [admission@cecbilaspur.ac.in](mailto:admission@cecbilaspur.ac.in).";
+  }
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Accel-Buffering", "no");
+  const pieces = text.match(/\S+\s*|\s+/g) || [text];
+  for (let i = 0; i < pieces.length; i += 3) {
+    res.write(pieces.slice(i, i + 3).join(""));
+    await new Promise((r) => setTimeout(r, 12));
+  }
+  res.end();
 }
 
 async function readBody(req) {
@@ -67,8 +88,6 @@ module.exports = async function handler(req, res) {
     return sendJson(res, 405, { error: "Method not allowed" });
   }
 
-  const key = process.env.GROQ_API_KEY;
-  if (!key) return sendJson(res, 503, { error: "The assistant is not configured yet." });
 
   const origin = req.headers.origin;
   const host = req.headers["x-forwarded-host"] || req.headers.host;
@@ -84,6 +103,10 @@ module.exports = async function handler(req, res) {
   let messages;
   try { messages = cleanMessages((await readBody(req)).messages); } catch (e) { messages = null; }
   if (!messages) return sendJson(res, 400, { error: "Bad request" });
+
+  // Without a Groq key (e.g. not set in Vercel yet) answer from the built-in facts.
+  const key = process.env.GROQ_API_KEY;
+  if (!key) return sendFallback(res, messages);
 
   // Free-tier Groq keys are limited per model per minute, so on a 429 fall back to the
   // smaller model, then make one short retry before giving up.
@@ -117,15 +140,14 @@ module.exports = async function handler(req, res) {
     }
   } catch (e) {
     console.error("groq fetch failed", e);
-    return sendJson(res, 502, { error: "The assistant could not be reached." });
+    return sendFallback(res, messages);
   }
 
   if (!upstream.ok || !upstream.body) {
     const detail = upstream.bodyUsed ? "" : await upstream.text().catch(() => "");
     console.error("groq error", upstream.status, detail.slice(0, 400));
-    return upstream.status === 429
-      ? sendJson(res, 429, { error: "Law Desk is getting a lot of questions right now. Please try again in a minute." })
-      : sendJson(res, 502, { error: "The assistant could not answer right now." });
+    return sendFallback(res, messages);
+
   }
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
