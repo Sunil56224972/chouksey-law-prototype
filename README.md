@@ -57,3 +57,22 @@ Notes on content that is not verbatim from the college site:
 - Subject lists on the programmes page are indicative; the official syllabus is set by Atal Bihari Vajpayee Vishwavidyalaya.
 - The home page pull quote and the department vision line are paraphrased from site text.
 - Gallery captions, admission steps and the document checklist are written for the prototype.
+
+## Law Desk (AI assistant)
+
+Every page has a "Ask Law Desk" button (bottom right). It answers visitors' questions about programmes, fees, eligibility, admission and campus life in English, Hindi or Hinglish, using only the information published by the college.
+
+- `assets/js/assistant.js` - the chat widget (no dependencies)
+- `api/chat.js` - Vercel serverless function that calls Groq (`openai/gpt-oss-120b`, falls back to `openai/gpt-oss-20b` when rate-limited)
+- `api/_knowledge.js` - the assistant's instructions and the college facts it answers from. Edit this file to update what it knows.
+
+The Groq key is never shipped to the browser. Set it once in Vercel: Project > Settings > Environment Variables > `GROQ_API_KEY`, then redeploy.
+
+Local preview with the assistant working:
+
+```
+echo GROQ_API_KEY=your_key > .env.local
+node tools/serve.mjs        # http://localhost:3000
+```
+
+Opening the HTML files directly (file://) shows the site, but the assistant needs the server.

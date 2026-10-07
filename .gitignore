@@ -1,3 +1,9 @@
 scrape/
 Thumbs.db
 .DS_Store
+
+# local secrets and reference screenshots
+.env*
+/*.jpeg
+/big menu.png
+.vercel/
