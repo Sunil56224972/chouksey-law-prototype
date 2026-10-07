@@ -39,7 +39,7 @@ function programmesIn(text) {
 
 const INTENTS = [
   ["legal", /\b(my case|fir|bail|divorce|court case|property dispute|police|legal advice|legal notice|complaint against|dowry|mera case)\b/],
-  ["identity", /\b(who are you|what are you|are you (a |an )?(ai|bot|robot|human|real|person)|your name|who (made|built|created) you|tum kaun|aap kaun|kaun ho|bot ho)\b/],
+  ["identity", /\b(who are you|what are you|are you (a |an )?(ai|bot|robot|human|real|person)|your name|who (made|built|created) you|tum kaun|aap kaun|kaun ho|bot ho|chat ?gpt|gpt|gemini|artificial intelligence)\b|^\s*(are you|r u) (an? )?(ai|bot|human|real)\b/],
   ["difference", /\b(difference|differ|vs|versus|compare|comparison|fark|farak|better|which (one|course|programme|program) (is|should)|choose between)\b/],
   ["eligibility", /\b(eligib\w*|criteria|qualification|qualify|percent\w*|marks|scored|minimum|cut ?off|can i (join|apply|get|take|do)|join kar\w*|admission mil\w*|yogyata)\b|%|\u092F\u094B\u0917\u094D\u092F\u0924\u093E/],
   ["fees", /\b(fee|fees|cost|costs|price|charges?|tuition|how much (is|does|will|for|fee|fees)|kitna paisa|paisa|paise|rupees?|afford)\b|\u20B9|\u092B\u0940\u0938/],
@@ -278,8 +278,9 @@ function answer(messages) {
   }
   if (pct !== null && !intents.includes("eligibility")) intents.unshift("eligibility");
 
-  // Follow-ups such as "and for LLB?" or "kitni?" reuse the topic of the previous question.
-  if (!intents.length && prev && (progs.length || text.trim().split(/\s+/).length <= 4)) {
+  // Follow-ups such as "and for LLB?" or "aur uska?" reuse the topic of the previous question.
+  const followUp = progs.length || /^\s*(and|aur|or|what about|how about|uska|iska|unka|uski|iski|for|toh|to)\b/i.test(text);
+  if (!intents.length && prev && followUp) {
     intents = topical(prevIntents);
     if (!progs.length) progs = programmesIn(prev);
   }

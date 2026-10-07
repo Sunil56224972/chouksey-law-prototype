@@ -240,7 +240,7 @@
     controller = new AbortController();
     busy(true);
     var text = "";
-    var history = state.messages.slice(-12).map(function (m) { return { role: m.role, content: m.content }; });
+    var history = state.messages.slice(-16).map(function (m) { return { role: m.role, content: m.content }; });
 
     fetch(ENDPOINT, {
       method: "POST",

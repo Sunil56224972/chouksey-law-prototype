@@ -8,8 +8,9 @@ const fallback = require("./_fallback.js");
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+const SECOND_MODEL = process.env.GROQ_SECOND_MODEL || "qwen/qwen3.8-27b";
 const FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || "openai/gpt-oss-20b";
-const MAX_TURNS = 12;
+const MAX_TURNS = 16;
 const MAX_USER_CHARS = 800;
 const WINDOW_MS = 5 * 60 * 1000;
 const WINDOW_LIMIT = 30;
@@ -79,7 +80,7 @@ function scriptHint(messages) {
   const last = messages[messages.length - 1].content;
   return /[\u0900-\u097F]/.test(last)
     ? "Reply in Hindi using Devanagari script."
-    : "The visitor wrote in Roman (Latin) letters. Reply ONLY in Roman letters: in English if they wrote English, or in simple Hinglish (Hindi words written in Roman letters, e.g. \"Aapki fees 20,000 per semester hai\") if they wrote Hinglish. Do not use Devanagari.";
+    : "The visitor wrote in Roman (Latin) letters. Reply ONLY in Roman letters, in the same language as their latest message: English if it is English, or simple Hinglish (Hindi words in Roman letters, e.g. \"Aapki fees 20,000 per semester hai\") if it contains Hindi words such as hai, kya, ka, kaisa, scene or batao. Do not use Devanagari.";
 }
 
 module.exports = async function handler(req, res) {
@@ -108,17 +109,17 @@ module.exports = async function handler(req, res) {
   const key = process.env.GROQ_API_KEY;
   if (!key) return sendFallback(res, messages);
 
-  // Free-tier Groq keys are limited per model per minute, so on a 429 fall back to the
-  // smaller model, then make one short retry before giving up.
+  // Free-tier Groq keys are limited per model per minute (about 8k tokens), so on a 429
+  // move to the next model, each of which has its own limit, then retry once.
   const callGroq = (model) => fetch(GROQ_URL, {
     method: "POST",
     headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
     body: JSON.stringify({
       model,
       messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages, { role: "system", content: scriptHint(messages) }],
-      temperature: 0.3,
-      max_completion_tokens: 700,
-      reasoning_effort: "low",
+      temperature: 0.6,
+      max_completion_tokens: 1200,
+      reasoning_effort: model.startsWith("openai/") ? "low" : "none",
       include_reasoning: false,
       stream: true
     }),
@@ -127,13 +128,13 @@ module.exports = async function handler(req, res) {
 
   let upstream;
   try {
-    const attempts = [MODEL, FALLBACK_MODEL, MODEL];
+    const attempts = [MODEL, SECOND_MODEL, FALLBACK_MODEL, MODEL];
     for (let i = 0; i < attempts.length; i++) {
       upstream = await callGroq(attempts[i]);
       if (upstream.status !== 429) break;
       const detail = await upstream.text().catch(() => "");
       console.error("groq 429 on", attempts[i], detail.slice(0, 200));
-      if (i === 1) {
+      if (i === attempts.length - 2) {
         const wait = Math.min(Number(upstream.headers.get("retry-after")) || 3, 5);
         await new Promise((r) => setTimeout(r, wait * 1000));
       }

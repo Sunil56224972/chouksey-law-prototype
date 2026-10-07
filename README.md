@@ -63,7 +63,7 @@ Notes on content that is not verbatim from the college site:
 Every page has a "Ask Law Desk" button (bottom right). It answers visitors' questions about programmes, fees, eligibility, admission and campus life in English, Hindi or Hinglish, using only the information published by the college.
 
 - `assets/js/assistant.js` - the chat widget (no dependencies)
-- `api/chat.js` - Vercel serverless function that calls Groq (`openai/gpt-oss-120b`, falls back to `openai/gpt-oss-20b` when rate-limited)
+- `api/chat.js` - Vercel serverless function that calls Groq (`openai/gpt-oss-120b`, then `qwen/qwen3.8-27b` and `openai/gpt-oss-20b` when rate-limited). If the key is missing or Groq is down it answers from `api/_fallback.js`, a built-in responder using the same facts
 - `api/_knowledge.js` - the assistant's instructions and the college facts it answers from. Edit this file to update what it knows.
 
 The Groq key is never shipped to the browser. Set it once in Vercel: Project > Settings > Environment Variables > `GROQ_API_KEY`, then redeploy.
