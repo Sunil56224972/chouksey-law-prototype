@@ -34,7 +34,7 @@ function sendJson(res, status, payload) {
 
 // Answer from the built-in college facts (api/_fallback.js), streamed in small pieces
 // like a model reply, so visitors get a real answer instead of an error.
-async function sendFallback(res, messages) {
+async function sendFallback(res, messages, reason) {
   let text;
   try { text = fallback.answer(messages); } catch (e) {
     console.error("fallback failed", e);
@@ -44,6 +44,7 @@ async function sendFallback(res, messages) {
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("X-LawDesk-Source", "fallback:" + reason); // why Groq was not used (no secrets)
   const pieces = text.match(/\S+\s*|\s+/g) || [text];
   for (let i = 0; i < pieces.length; i += 3) {
     res.write(pieces.slice(i, i + 3).join(""));
@@ -107,7 +108,7 @@ module.exports = async function handler(req, res) {
 
   // Without a Groq key (e.g. not set in Vercel yet) answer from the built-in facts.
   const key = process.env.GROQ_API_KEY;
-  if (!key) return sendFallback(res, messages);
+  if (!key) return sendFallback(res, messages, "no-key");
 
   // Free-tier Groq keys are limited per model per minute (about 8k tokens), so on a 429
   // move to the next model, each of which has its own limit, then retry once.
@@ -141,19 +142,20 @@ module.exports = async function handler(req, res) {
     }
   } catch (e) {
     console.error("groq fetch failed", e);
-    return sendFallback(res, messages);
+    return sendFallback(res, messages, "unreachable");
   }
 
   if (!upstream.ok || !upstream.body) {
     const detail = upstream.bodyUsed ? "" : await upstream.text().catch(() => "");
     console.error("groq error", upstream.status, detail.slice(0, 400));
-    return sendFallback(res, messages);
+    return sendFallback(res, messages, "groq-" + upstream.status);
 
   }
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("X-LawDesk-Source", "groq");
 
   // Groq streams server-sent events; forward only the text deltas.
   const decoder = new TextDecoder();
