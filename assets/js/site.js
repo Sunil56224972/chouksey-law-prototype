@@ -129,6 +129,104 @@
     }
   }
 
+  /* Hero slideshow: crossfades the main photo and the inset together, like the
+     college site's banner slider. Pauses on hover, focus, hidden tab and the
+     pause button; swipes on touch screens. */
+  var slider = document.querySelector("[data-slider]");
+  if (slider) {
+    var mainSlides = slider.querySelectorAll("[data-slides=main] .slide");
+    var followSlides = slider.querySelectorAll("[data-slides=follow] .slide");
+    var media = slider.parentNode;
+    var titleEl = media.querySelector("[data-caption-title]");
+    var textEl = media.querySelector("[data-caption-text]");
+    var countEl = media.querySelector("[data-count]");
+    var bar = media.querySelector("[data-progress]");
+    var toggleBtn = media.querySelector("[data-toggle]");
+    var interval = Number(slider.getAttribute("data-interval")) || 5500;
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    var total = mainSlides.length;
+    var index = 0, timer = null, hovering = false, userPaused = reduce.matches;
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+
+    var restartBar = function () {
+      if (!bar) return;
+      bar.style.transition = "none";
+      bar.style.transform = "scaleX(0)";
+      if (userPaused || hovering || reduce.matches) return;
+      void bar.offsetWidth; // flush so the bar restarts from zero
+      bar.style.transition = "transform " + interval + "ms linear";
+      bar.style.transform = "scaleX(1)";
+    };
+    var go = function (i) {
+      index = (i + total) % total;
+      [mainSlides, followSlides].forEach(function (set) {
+        set.forEach(function (s, n) { s.classList.toggle("is-active", n === index % set.length); });
+      });
+      var active = mainSlides[index];
+      titleEl.textContent = active.getAttribute("data-title");
+      textEl.textContent = active.getAttribute("data-text");
+      countEl.textContent = pad(index + 1) + " / " + pad(total);
+      schedule();
+    };
+    var schedule = function () {
+      clearTimeout(timer);
+      restartBar();
+      if (userPaused || hovering || document.hidden) return;
+      timer = setTimeout(function () { go(index + 1); }, interval);
+    };
+    var setPaused = function (p) {
+      userPaused = p;
+      toggleBtn.setAttribute("aria-pressed", String(p));
+      toggleBtn.setAttribute("aria-label", p ? "Play slideshow" : "Pause slideshow");
+      schedule();
+    };
+
+    media.querySelector("[data-prev]").addEventListener("click", function () { go(index - 1); });
+    media.querySelector("[data-next]").addEventListener("click", function () { go(index + 1); });
+    toggleBtn.addEventListener("click", function () { setPaused(!userPaused); });
+    slider.addEventListener("mouseenter", function () { hovering = true; schedule(); });
+    slider.addEventListener("mouseleave", function () { hovering = false; schedule(); });
+    media.addEventListener("focusin", function () { hovering = true; schedule(); });
+    media.addEventListener("focusout", function () { hovering = false; schedule(); });
+    document.addEventListener("visibilitychange", schedule);
+
+    var startX = null;
+    slider.addEventListener("touchstart", function (e) { startX = e.touches[0].clientX; }, { passive: true });
+    slider.addEventListener("touchend", function (e) {
+      if (startX === null) return;
+      var dx = e.changedTouches[0].clientX - startX;
+      if (Math.abs(dx) > 40) go(index + (dx < 0 ? 1 : -1));
+      startX = null;
+    });
+
+    // Fetch every slide once the page is loaded so no fade lands on a blank frame.
+    var preload = function () {
+      slider.querySelectorAll(".slide img").forEach(function (img) {
+        img.loading = "eager";
+        if (img.decode) img.decode().catch(function () {});
+      });
+    };
+    if (document.readyState === "complete") preload(); else window.addEventListener("load", preload);
+
+    // Drop the intro wipe overlay once it has played, even if CSS animations are throttled.
+    var mainFrame = slider.querySelector("[data-slides=main]");
+    setTimeout(function () { mainFrame.classList.add("is-revealed"); }, 1600);
+
+    if (userPaused) setPaused(true);
+    go(0);
+  }
+
+  /* Photo reel: duplicate the set once so the CSS marquee loops seamlessly. */
+  var reel = document.querySelector("[data-reel]");
+  if (reel) {
+    Array.prototype.slice.call(reel.children).forEach(function (li) {
+      var copy = li.cloneNode(true);
+      copy.setAttribute("aria-hidden", "true");
+      reel.appendChild(copy);
+    });
+    reel.style.setProperty("--reel-dur", (reel.children.length * 3.2) + "s");
+    reel.classList.add("is-running");
+  }
   var year = document.getElementById("year");
   if (year) year.textContent = new Date().getFullYear();
 })();
